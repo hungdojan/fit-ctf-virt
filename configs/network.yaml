@@ -1,0 +1,8 @@
+config:
+  ipv4.address: 10.100.0.1/24
+  ipv4.nat: true
+  ipv6.address: none
+description: Network for fit-ctf services
+name: fitctfbr0
+type: bridge
+managed: true

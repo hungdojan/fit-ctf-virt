@@ -1,0 +1,5 @@
+name: fit-ctf-pool
+description: Pool for managing fit-ctf resources
+drivers: dir
+config:
+  size: 30GiB
