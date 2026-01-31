@@ -7,7 +7,7 @@ dnf install -y git wget epel-release
 cd /etc/yum.repos.d && \
     wget https://copr.fedorainfracloud.org/coprs/neelc/incus/repo/rhel+epel-10/neelc-incus-rhel+epel-10.repo
 cd -
-dnf install incus incus-tools incus-ui
+dnf install -y incus incus-tools incus-client pipx
 pipx install poetry
 
 # firewall setup
@@ -24,3 +24,6 @@ incus admin init --minimal
 # pull configurations
 git clone https://github.com/hungdojan/fit-ctf-virt && cd fit-ctf-virt
 poetry lock
+poetry install
+eval $(poetry env activate) && \
+    inv setup

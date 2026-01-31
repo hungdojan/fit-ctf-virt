@@ -33,7 +33,7 @@ def setup_common(c: Context):
         return cmd
 
     cmds = []
-    cmds.append(f"incus storage create fit-ctf-pool < {str(get_config('pool'))}")
+    cmds.append(f"incus storage create fit-ctf-pool dir < {str(get_config('pool'))}")
     cmds.append(f"incus network create fitctfbr0 < {str(get_config('network'))}")
     cmds.extend(_get_init(c_name) for c_name in CONTAINER_NAMES)
     c.run(dedent("\n".join(cmds)), shell="/bin/bash")
