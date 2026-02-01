@@ -1,0 +1,71 @@
+common:
+  network:
+    description: Network for fit-ctf service
+    config:
+      ipv4.address: "10.100.0.1/24"
+      ipv4.nat: true
+      ipv6.address: "none"
+    name: fitctfbr0
+    type: bridge
+  profile:
+    description: Default profile for fit-ctf services
+    name: fit-ctf-profile
+    config:
+      boot.autostart: true
+    devices:
+      eth0:
+        name: eth0
+        network: fitctfbr0
+        type: nic
+      root:
+        path: /
+        pool: fit-ctf-pool
+        type: disk
+  storage:
+    description: Storage pool for fit-ctf services
+    driver: btrfs
+    name: fit-ctf-pool
+    config:
+      size: 10GiB             # change this
+playground:
+  name: fit-ctf-playground
+  config:
+    image: rockylinux/10
+    devices:
+      eth0:
+        ipv4.address: 10.100.0.2
+        network: fitctfbr0
+        type: nic
+      root:
+        type: disk
+        path: "/"
+        pool: fit-ctf-pool
+        size: 30GiB           # change this
+      agent:
+        source: agent:config
+        type: disk
+    config:
+      limits.cpu: 1           # change this
+      limits.memory: 1536MiB  # change this
+    profiles:
+      - fit-ctf-profile
+    type: virtual-machine
+  envs: {}
+database:
+  name: fit-ctf-database
+  config:
+    type: container
+    image: rockylinux/10
+    devices:
+      eth0:
+        ipv4.address: 10.100.0.3
+        network: fitctfbr0
+        type: nic
+    profiles:
+      - fit-ctf-profile
+  envs:
+    mongo_admin_user: admin         # change this
+    mongo_admin_pass: supersecret   # change this
+    mongo_app_db: ctf-db            # change this
+    mongo_app_user: ctf-user        # change this
+    mongo_app_pass: ctf-pass        # change this

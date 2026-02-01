@@ -1,0 +1,92 @@
+# tasks/main.yml
+- name: Ensure required variables are set
+  assert:
+    that:
+      - mongo_admin_user is defined
+      - mongo_admin_pass is defined
+      - mongo_app_db is defined
+      - mongo_app_user is defined
+      - mongo_app_pass is defined
+    fail_msg: "Required MongoDB variables are missing! Set them in env-config.yaml file."
+
+- name: Ensure required packages are installed
+  dnf:
+    name:
+      - python3-pip
+      - dnf-plugins-core
+      - curl
+    state: present
+
+- name: Copy MongoDB repo file
+  copy:
+    src: mongodb-org-7.0.repo
+    dest: /etc/yum.repos.d/mongodb-org-7.0.repo
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Install MongoDB packages
+  dnf:
+    name: mongodb-org
+    state: present
+    disable_gpg_check: yes
+
+- name: Ensure MongoDB data directory exists
+  file:
+    path: /var/lib/mongodb
+    state: directory
+    owner: mongod
+    group: mongod
+    mode: 0755
+
+- name: Enable authentication in mongod.conf
+  blockinfile:
+    path: /etc/mongod.conf
+    block: |
+      security:
+        authorization: enabled
+- name: Configure bindIp
+  ansible.builtin.lineinfile:
+    path: /etc/mongod.conf
+    regexp: '^(\s*)bindIp:.*'
+    line: "  bindIp: 0.0.0.0"
+    backup: yes
+
+- name: Enable and start MongoDB
+  systemd:
+    name: mongod
+    enabled: yes
+    state: restarted
+
+- name: Wait for MongoDB to be available
+  wait_for:
+    host: 127.0.0.1
+    port: 27017
+    timeout: 30
+
+- name: Create MongoDB admin user
+  shell: |
+    mongosh <<EOF
+    use admin
+    db.createUser({
+      user: '{{ mongo_admin_user }}',
+      pwd: '{{ mongo_admin_pass }}',
+      roles: [ { role: 'root', db: 'admin' } ]
+    })
+    EOF
+  args:
+    creates: "/var/lib/mongodb/.admin_created"
+  register: admin_user
+
+- name: Create application database and user
+  shell: |
+    mongosh -u {{ mongo_admin_user }} -p {{ mongo_admin_pass }} --authenticationDatabase admin <<EOF
+    use {{ mongo_app_db }}
+    db.createUser({
+      user: '{{ mongo_app_user }}',
+      pwd: '{{ mongo_app_pass }}',
+      roles: [ { role: 'readWrite', db: '{{ mongo_app_db }}' } ]
+    })
+    EOF
+  args:
+    creates: "/var/lib/mongodb/.app_user_created"

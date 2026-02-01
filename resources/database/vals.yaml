@@ -1,0 +1,6 @@
+
+mongo_admin_user: admin
+mongo_admin_pass: supersecret
+mongo_app_db: ctf-db
+mongo_app_user: ctf-user
+mongo_app_pass: ctf-pass

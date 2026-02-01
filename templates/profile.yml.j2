@@ -1,0 +1,17 @@
+{%- if profile.config -%}
+config:
+  {% for key, value in profile.items() %}
+  {{ key }}: {{ value }}
+  {% endfor %}
+{%- else -%}
+config: {}
+{%- endif -%}
+
+{%- if profile.config -%}
+config:
+  {% for key, value in profile.items() %}
+  {{ key }}: {{ value }}
+  {% endfor %}
+{%- else -%}
+config: {}
+{%- endif -%}

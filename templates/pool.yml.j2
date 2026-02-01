@@ -1,0 +1,13 @@
+name: {{ storage.name }}
+description: {{ storage.description }}
+{% if storage.drivers -%}
+drivers: {{ storage.drivers }}
+{% else %}
+drivers: dir
+{%- endif -%}
+{% if storage.config -%}
+config:
+  {%- for key, value in storage.config.items() %}
+  {{ key }}: {{ value }}
+  {%- endfor-%}
+{%- endif -%}
