@@ -50,7 +50,11 @@ playground:
     profiles:
       - fit-ctf-profile
     type: virtual-machine
-  envs: {}
+  envs:
+    db_name: ""       # same as database.envs.mongo_app_db
+    db_username: ""   # same as database.envs.mongo_app_user
+    db_password: ""   # same as database.env.mongo_app_pass
+    db_host: fit-ctf-database
 database:
   name: fit-ctf-database
   config:
@@ -64,8 +68,8 @@ database:
     profiles:
       - fit-ctf-profile
   envs:
-    mongo_admin_user: admin         # change this
-    mongo_admin_pass: supersecret   # change this
-    mongo_app_db: ctf-db            # change this
-    mongo_app_user: ctf-user        # change this
-    mongo_app_pass: ctf-pass        # change this
+    mongo_admin_user: ""  # change this
+    mongo_admin_pass: ""  # change this
+    mongo_app_db: ""      # change this
+    mongo_app_user: ""    # change this
+    mongo_app_pass: ""    # change this

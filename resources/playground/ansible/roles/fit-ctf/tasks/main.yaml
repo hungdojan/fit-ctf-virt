@@ -1,0 +1,167 @@
+- name: Ensure required variables are set
+  assert:
+    that:
+      - user is defined
+      - repo_url is defined
+      - repo_dir is defined
+      - db_username is defined
+      - db_password is defined
+      - db_name is defined
+      - db_host is defined
+      - rdz_port is defined
+
+- name: Install dependencies openssh-server
+  package:
+    name:
+      - openssh-server
+      - git
+      - pipx
+      - podman
+    state: present
+    # gpg validation breaks the installation
+    disable_gpg_check: true
+
+- name: Start and enable SSH service
+  service:
+    name: sshd
+    enabled: true
+    state: started
+
+- name: Create user with non-root privileges
+  ansible.builtin.user:
+    name: "{{ user }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Enable local bin for user
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "/home/{{ user }}/.bashrc"
+    line: "export PATH=$HOME/.local/bin:$PATH"
+    create: true
+
+- name: Create application directory
+  file:
+    path: "{{ repo_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: 0755
+
+- name: Mark "{{ repo_dir }} safe for git"
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command: git config --global --add safe.directory "{{ repo_dir }}"
+
+- name: Clone fit-ctf repo
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ repo_dir }}"
+    version: devel
+    update: true
+
+- name: Ensure pipx path
+  become: true
+  become_user: "{{ user }}"
+  shell: pipx ensurepath
+  args:
+    creates: "/home/{{ user }}/.local/bin/poetry"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install Poetry
+  become: true
+  become_user: "{{ user }}"
+  community.general.pipx:
+    name: poetry
+    state: present
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install project dependencies
+  become: true
+  become_user: "{{ user }}"
+  shell: poetry install
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Create data directory
+  file:
+    path: "{{ repo_dir }}-data"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: 0755
+
+- name: Generate env file
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv generate-env \
+      --db-username "{{ db_username }}" \
+      --db-password "{{ db_password }}" \
+      --db-host "{{ db_host }}" \
+      --db-name "{{ db_name }}"
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Edit file locations in env file
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "{{ repo_dir }}/.env-test"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backrefs: true
+  loop:
+    - regexp: "^#(PROJECT_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/projects"
+    - regexp: "^#(USER_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/users"
+    - regexp: "^#(MODULE_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/modules"
+
+- name: Rename the generated file
+  become: true
+  become_user: "{{ user }}"
+  copy:
+    src: "{{ repo_dir }}/.env-test"
+    dest: "{{ repo_dir }}/.env"
+    remote_src: true
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: 0644
+
+- name: Generate sshd configuration
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv setup-sshd \
+      --user {{ user }} \
+      --rdz-port {{ rdz_port }} \
+      --fitctf-dirpath "{{ repo_dir }}"
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install custom sshd config
+  copy:
+    src: "{{ repo_dir }}/99-ctf-rule.conf"
+    dest: /etc/ssh/sshd_config.d/99-ctf-rule.conf
+    owner: root
+    group: root
+    mode: 0644
+    remote_src: true
+
+- name: Restart sshd
+  systemd:
+    name: sshd
+    state: restarted

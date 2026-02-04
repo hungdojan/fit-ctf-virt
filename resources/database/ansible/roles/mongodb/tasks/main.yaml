@@ -10,7 +10,7 @@
     fail_msg: "Required MongoDB variables are missing! Set them in env-config.yaml file."
 
 - name: Ensure required packages are installed
-  dnf:
+  package:
     name:
       - python3-pip
       - dnf-plugins-core
@@ -26,9 +26,10 @@
     mode: 0644
 
 - name: Install MongoDB packages
-  dnf:
+  package:
     name: mongodb-org
     state: present
+    # gpg validation breaks the installation
     disable_gpg_check: yes
 
 - name: Ensure MongoDB data directory exists
@@ -49,7 +50,7 @@
   ansible.builtin.lineinfile:
     path: /etc/mongod.conf
     regexp: '^(\s*)bindIp:.*'
-    line: "  bindIp: 0.0.0.0"
+    line: "  bindIp: 127.0.0.1,{{ playground_ip }}"
     backup: yes
 
 - name: Enable and start MongoDB
@@ -65,28 +66,28 @@
     timeout: 30
 
 - name: Create MongoDB admin user
-  shell: |
-    mongosh <<EOF
-    use admin
-    db.createUser({
-      user: '{{ mongo_admin_user }}',
-      pwd: '{{ mongo_admin_pass }}',
-      roles: [ { role: 'root', db: 'admin' } ]
-    })
-    EOF
-  args:
-    creates: "/var/lib/mongodb/.admin_created"
-  register: admin_user
+  community.mongodb.mongodb_user: 
+    login_host: 127.0.0.1
+    login_port: 27017
+    database: admin
+    name: "{{ mongo_admin_user }}"
+    password: "{{ mongo_admin_pass }}"
+    roles:
+      - db: admin
+        role: root
+    state: present
 
 - name: Create application database and user
-  shell: |
-    mongosh -u {{ mongo_admin_user }} -p {{ mongo_admin_pass }} --authenticationDatabase admin <<EOF
-    use {{ mongo_app_db }}
-    db.createUser({
-      user: '{{ mongo_app_user }}',
-      pwd: '{{ mongo_app_pass }}',
-      roles: [ { role: 'readWrite', db: '{{ mongo_app_db }}' } ]
-    })
-    EOF
-  args:
-    creates: "/var/lib/mongodb/.app_user_created"
+  community.mongodb.mongodb_user: 
+    login_user: "{{ mongo_admin_user }}"
+    login_password: "{{ mongo_admin_pass }}"
+    login_database: admin
+    login_host: 127.0.0.1
+    login_port: 27017
+    database: "{{ mongo_app_db }}"
+    name: "{{ mongo_app_user }}"
+    password: "{{ mongo_app_pass }}"
+    roles:
+      - db: "{{ mongo_app_db }}"
+        role: readWrite
+    state: present
