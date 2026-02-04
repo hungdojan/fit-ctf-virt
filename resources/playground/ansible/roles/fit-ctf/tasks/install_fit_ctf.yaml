@@ -1,0 +1,49 @@
+- name: Create application directory
+  file:
+    path: "{{ repo_dir }}"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: 0755
+
+- name: Mark "{{ repo_dir }} safe for git"
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.command: git config --global --add safe.directory "{{ repo_dir }}"
+
+- name: Clone fit-ctf repo
+  become: true
+  become_user: "{{ user }}"
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ repo_dir }}"
+    version: devel
+    update: true
+
+- name: Ensure pipx path
+  become: true
+  become_user: "{{ user }}"
+  shell: pipx ensurepath
+  args:
+    creates: "/home/{{ user }}/.local/bin/poetry"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install Poetry
+  become: true
+  become_user: "{{ user }}"
+  community.general.pipx:
+    name: poetry
+    state: present
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install project dependencies
+  become: true
+  become_user: "{{ user }}"
+  shell: poetry install
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+

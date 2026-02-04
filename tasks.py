@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -34,6 +35,11 @@ def generate_extra_vars(envs: dict, instance_name: str):
     out_vals_fp = output_dir / "vals.yaml"
     with open(out_vals_fp, "w") as f:
         f.write(template.render(envs=envs))
+
+
+def copy_init_script(instance_name: str):
+    resource_dir = root_dirpath() / "resources"
+    output_dir = resource_dir / instance_name
     src_script = resource_dir / "init.sh"
     dst_script = output_dir / "init.sh"
     shutil.copy(src=src_script, dst=dst_script)
@@ -59,6 +65,28 @@ def setup_storage(c: Context, config: dict):
         config_path = Path(storage_config.name)
         cmd = f"incus storage create {name} {storage_type} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
+
+
+def wait_for_ip(c: Context, instance_name: str, host_target: str, timeout: int = 120):
+    start = time.time()
+    while time.time() - start < timeout:
+        result = c.run(f"incus list {instance_name} --format json", hide=True)
+        try:
+            data = json.loads(result.stdout)
+        except (json.JSONDecodeError, AttributeError) as e:
+            print(f"Error parsing JSON: {e}")
+            raise
+        if data[0].get("state", {}).get("network", {}):
+            network = data[0]["state"]["network"]
+            for interface in network.values():
+                for address in interface["addresses"]:
+                    if address["family"] != "inet":
+                        continue
+                    if address["address"] == host_target:
+                        return
+        print("Waiting for machine to boot up...")
+        time.sleep(2)
+    raise TimeoutError(f"{instance_name} did not start within {timeout}s")
 
 
 def setup_network(c: Context, config: dict):
@@ -190,29 +218,42 @@ def setup(c: Context):
     setup_database(c, config["database"])
 
 
-def init_instance(c: Context, config: dict, resource_name: str):
+def init_instance(
+    c: Context, config: dict, resource_name: str, extra_vars: bool = True
+):
     name = config[resource_name]["name"]
     resource_dir = root_dirpath() / "resources" / resource_name
     if not instance_is_running(c, name):
-        c.run(f"incus start {name}", echo=True, pty=True)
+        c.run(f"incus start {name}", echo=True)
 
-    generate_extra_vars(config[resource_name]["envs"], resource_name)
+    wait_for_ip(
+        c, name, config[resource_name]["config"]["devices"]["eth0"]["ipv4.address"]
+    )
+    if extra_vars:
+        generate_extra_vars(config[resource_name]["envs"], resource_name)
+    copy_init_script(resource_name)
     c.run(
         f"incus file push -r {str(resource_dir)}/* {name}/tmp/setup/",
         echo=True,
         pty=True,
     )
     c.run(
-        """
+        f"""
         # Set ownership to root (or another user)
-        incus exec fit-ctf-database -- chown -R root:root /tmp/setup
+        incus exec {name} -- chown -R root:root /tmp/setup
 
         # Make scripts executable
-        incus exec fit-ctf-database -- chmod -R 755 /tmp/setup
+        incus exec {name} -- chmod -R 755 /tmp/setup
         """
     )
-    c.run(f"incus exec {name} -- bash /tmp/setup/init.sh", pty=True, echo=True)
-    c.run(f"incus exec {name} -- rm -rf /tmp/setup", pty=True, echo=True)
+    c.run(f"incus exec {name} -- bash /tmp/setup/init.sh", echo=True)
+    ansible_cmd = (
+        f"cd /tmp/setup/ansible && ansible-playbook -i inventory.ini playbook.yaml"
+    )
+    if extra_vars:
+        ansible_cmd += " --extra-vars '@/tmp/setup/vals.yaml'"
+    c.run(f'incus exec {name} -- bash -c "{ansible_cmd}"', echo=True)
+    c.run(f"incus exec {name} -- rm -rf /tmp/setup", echo=True)
 
 
 @task

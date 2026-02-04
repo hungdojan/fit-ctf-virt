@@ -1,0 +1,37 @@
+- name: Create user with non-root privileges
+  ansible.builtin.user:
+    name: "{{ user }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Disable user password to allow passwordless login
+  shell: passwd -d user
+
+- name: Enable systemd lingering
+  shell: "loginctl enable-linger {{ user }}"
+
+- name: Ensure runtime directory exists for DBus
+  file:
+    path: "/run/user/{{ lookup('ansible.builtin.pipe','id -u ' + user) }}"
+    state: directory
+    mode: '0700'
+    owner: "{{ user }}"
+    group: "{{ user }}"
+
+- name: Add XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS to .bashrc
+  blockinfile:
+    path: "/home/{{ user }}/.bashrc"
+    block: |
+      # Rootless Podman runtime and D-Bus
+      export XDG_RUNTIME_DIR=/run/user/$(id -u)
+      export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+  become_user: "{{ user }}"
+  become: true
+
+- name: Enable local bin for user
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "/home/{{ user }}/.bashrc"
+    line: "export PATH=$HOME/.local/bin:$PATH"
+    create: true

@@ -1,7 +1,7 @@
 {%- if not envs -%}
 []
 {%- else -%}
-{%- for k, v in envs.items() %}
+{% for k, v in envs.items() -%}
 {{ k }}: {{ v }}
-{%- endfor -%}
+{% endfor -%}
 {%- endif -%}

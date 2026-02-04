@@ -1,0 +1,107 @@
+- name: Ensure required variables are set
+  assert:
+    that:
+      - user is defined
+      - repo_url is defined
+      - repo_dir is defined
+      - db_username is defined
+      - db_password is defined
+      - db_name is defined
+      - db_host is defined
+      - rdz_port is defined
+
+- name: Install dependencies openssh-server
+  package:
+    name:
+      - openssh-server
+      - git
+      - pipx
+      - podman
+      - podman-compose
+    state: present
+
+- name: Start and enable SSH service
+  service:
+    name: sshd
+    enabled: true
+    state: started
+
+- name: Create user with non-root privileges
+  import_tasks: setup_user.yaml
+
+- name: Install fit-ctf project
+  import_tasks: install_fit_ctf.yaml
+
+- name: Create data directory
+  file:
+    path: "{{ repo_dir }}-data"
+    state: directory
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    mode: 0755
+
+- name: Generate env file
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv generate-env \
+      --db-username "{{ db_username }}" \
+      --db-password "{{ db_password }}" \
+      --db-host "{{ db_host }}" \
+      --db-name "{{ db_name }}" \
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Edit file locations in env file
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "{{ repo_dir }}/.env"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backrefs: true
+  loop:
+    - regexp: "^#(PROJECT_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/projects"
+    - regexp: "^#(USER_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/users"
+    - regexp: "^#(MODULE_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/modules"
+
+- name: Generate sshd configuration
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv setup-sshd \
+      --user {{ user }} \
+      --rdz-port {{ rdz_port }} \
+      --fitctf-dirpath "{{ repo_dir }}"
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Install custom sshd config
+  copy:
+    src: "{{ repo_dir }}/99-ctf-rule.conf"
+    dest: /etc/ssh/sshd_config.d/99-ctf-rule.conf
+    owner: root
+    group: root
+    mode: 0644
+    remote_src: true
+
+- name: Check configurations
+  shell: sshd -t
+
+- name: Restart sshd
+  systemd:
+    name: sshd
+    state: restarted
+
+# configuration to deploy local database using podman
+- block:
+    - name: Setup MongoDB container
+      include_tasks: install_local_db.yaml
+  when: local_db | default(false)

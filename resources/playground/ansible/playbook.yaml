@@ -1,0 +1,10 @@
+---
+- name: Setup fit-ctf playground
+  hosts: playground
+  vars:
+    user: user
+    repo_url: https://github.com/hungdojan/fit-ctf
+    repo_dir: /opt/fit-ctf
+    rdz_port: 5555
+  roles:
+    - fit-ctf
