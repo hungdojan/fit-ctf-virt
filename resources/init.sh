@@ -5,7 +5,7 @@ set -xe
 export PATH="$PATH:$HOME/.local/bin"
 echo "export PATH=\"$PATH:$HOME/.local/bin\"" >> "$HOME"/.bashrc
 
-dnf update
+dnf update -y
 dnf install epel-release -y
 dnf install -y git pipx neovim ansible-core
 

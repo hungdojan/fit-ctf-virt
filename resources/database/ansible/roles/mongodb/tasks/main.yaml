@@ -15,6 +15,7 @@
       - python3-pip
       - dnf-plugins-core
       - curl
+      - python3-pymongo
     state: present
 
 - name: Copy MongoDB repo file
@@ -34,23 +35,20 @@
 
 - name: Ensure MongoDB data directory exists
   file:
-    path: /var/lib/mongodb
+    path: "{{ item }}"
     state: directory
     owner: mongod
     group: mongod
     mode: 0755
+  loop:
+    - /var/lib/mongodb
+    - /data/db
 
-- name: Enable authentication in mongod.conf
-  blockinfile:
-    path: /etc/mongod.conf
-    block: |
-      security:
-        authorization: enabled
 - name: Configure bindIp
-  ansible.builtin.lineinfile:
+  lineinfile:
     path: /etc/mongod.conf
     regexp: '^(\s*)bindIp:.*'
-    line: "  bindIp: 127.0.0.1,{{ playground_ip }}"
+    line: "  bindIp: 0.0.0.0"
     backup: yes
 
 - name: Enable and start MongoDB
@@ -58,6 +56,7 @@
     name: mongod
     enabled: yes
     state: restarted
+
 
 - name: Wait for MongoDB to be available
   wait_for:
@@ -67,8 +66,6 @@
 
 - name: Create MongoDB admin user
   community.mongodb.mongodb_user: 
-    login_host: 127.0.0.1
-    login_port: 27017
     database: admin
     name: "{{ mongo_admin_user }}"
     password: "{{ mongo_admin_pass }}"
@@ -77,14 +74,24 @@
         role: root
     state: present
 
+- name: Enable authentication in mongod.conf
+  blockinfile:
+    path: /etc/mongod.conf
+    block: |
+      security:
+        authorization: enabled
+
+- name: Enable and start MongoDB
+  systemd:
+    name: mongod
+    enabled: yes
+    state: restarted
+
 - name: Create application database and user
   community.mongodb.mongodb_user: 
     login_user: "{{ mongo_admin_user }}"
     login_password: "{{ mongo_admin_pass }}"
-    login_database: admin
-    login_host: 127.0.0.1
-    login_port: 27017
-    database: "{{ mongo_app_db }}"
+    database: admin
     name: "{{ mongo_app_user }}"
     password: "{{ mongo_app_pass }}"
     roles:

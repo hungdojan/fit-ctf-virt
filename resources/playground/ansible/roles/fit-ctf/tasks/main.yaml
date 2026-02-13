@@ -33,6 +33,9 @@
     shell: /bin/bash
     create_home: true
 
+- name: Disable user password to allow passwordless login
+  shell: passwd -d user
+
 - name: Enable local bin for user
   become: true
   become_user: "{{ user }}"
@@ -106,7 +109,7 @@
       --db-username "{{ db_username }}" \
       --db-password "{{ db_password }}" \
       --db-host "{{ db_host }}" \
-      --db-name "{{ db_name }}"
+      --db-name "{{ db_name }}" \
   args:
     chdir: "{{ repo_dir }}"
   environment:
@@ -116,7 +119,7 @@
   become: true
   become_user: "{{ user }}"
   lineinfile:
-    path: "{{ repo_dir }}/.env-test"
+    path: "{{ repo_dir }}/.env"
     regexp: "{{ item.regexp }}"
     line: "{{ item.line }}"
     backrefs: true
@@ -132,7 +135,7 @@
   become: true
   become_user: "{{ user }}"
   copy:
-    src: "{{ repo_dir }}/.env-test"
+    src: "{{ repo_dir }}/.env"
     dest: "{{ repo_dir }}/.env"
     remote_src: true
     owner: "{{ user }}"
@@ -161,7 +164,89 @@
     mode: 0644
     remote_src: true
 
+- name: Check configurations
+  shell: sshd -t
+
 - name: Restart sshd
   systemd:
     name: sshd
     state: restarted
+
+- block:
+    - name: Ensure required variables for running a local database
+      assert:
+        that:
+          - db_admin_username is defined
+          - db_admin_password is defined
+
+    - name: Enable runtime dir and local bin in .bashrc
+      become: true
+      become_user: "{{ user }}"
+      lineinfile:
+        path: "/home/{{ user }}/.bashrc"
+        line: "export XDG_RUNTIME_DIR=/tmp/1000-runtime"
+        create: true
+
+    - name: Create runtime dir
+      file:
+        path: "/tmp/1000-runtime"
+        state: directory
+        mode: '0755'
+        owner: "{{ user }}"
+        group: "{{ user }}"
+        recurse: true
+
+    - name: Install podman
+      package:
+        name:
+          - podman
+        state: present
+
+    - name: Deploy database
+      become: true
+      become_user: "{{ user }}"
+      shell: |
+        poetry run inv db-deploy \
+          --db-admin-username "{{ db_admin_username }}" \
+          --db-admin-password "{{ db_admin_password }}" \
+          --db-username "{{ db_username }}" \
+          --db-password "{{ db_password }}" \
+          --db-name "{{ db_name }}" \
+      args:
+        chdir: "{{ repo_dir }}"
+      environment:
+        PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+    - name: Enable user lingering
+      shell: "loginctl enable-linger {{ user }}"
+
+    - name: Start and enable MongoDB user service
+      become: true
+      become_user: "{{ user }}"
+      systemd:
+        name: mongodb.service
+        state: started
+        enabled: yes
+        scope: user
+
+    - name: Wait for MongoDB to be available
+      wait_for:
+        host: localhost
+        port: 27017
+        timeout: 30
+
+    - name: Update env file
+      become: true
+      become_user: "{{ user }}"
+      shell: |
+        poetry run inv generate-env \
+          --db-username "{{ db_username }}" \
+          --db-password "{{ db_password }}" \
+          --db-host localhost \
+          --db-name "{{ db_name }}" \
+      args:
+        chdir: "{{ repo_dir }}"
+      environment:
+        PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+  when: local_db | default(false)
