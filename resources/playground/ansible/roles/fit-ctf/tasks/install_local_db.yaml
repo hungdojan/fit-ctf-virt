@@ -1,0 +1,60 @@
+- name: Ensure required variables for running a local database
+  assert:
+    that:
+      - db_admin_username is defined
+      - db_admin_password is defined
+
+- name: Install dependencies
+  package:
+    name:
+      - podman
+    state: present
+
+- name: Deploy database
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv db-deploy \
+      --db-admin-username "{{ db_admin_username }}" \
+      --db-admin-password "{{ db_admin_password }}" \
+      --db-username "{{ db_username }}" \
+      --db-password "{{ db_password }}" \
+      --db-name "{{ db_name }}" \
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+- name: Enable user lingering
+  shell: "loginctl enable-linger {{ user }}"
+
+- name: Start and enable MongoDB user service
+  become: true
+  become_user: "{{ user }}"
+  systemd:
+    name: mongodb.service
+    state: started
+    enabled: yes
+    scope: user
+
+- name: Wait for MongoDB to be available
+  wait_for:
+    host: localhost
+    port: 27017
+    timeout: 30
+
+- name: Update env file
+  become: true
+  become_user: "{{ user }}"
+  shell: |
+    poetry run inv generate-env \
+      --db-username "{{ db_username }}" \
+      --db-password "{{ db_password }}" \
+      --db-host localhost \
+      --db-name "{{ db_name }}" \
+  args:
+    chdir: "{{ repo_dir }}"
+  environment:
+    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+
+

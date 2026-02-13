@@ -17,9 +17,8 @@
       - git
       - pipx
       - podman
+      - podman-compose
     state: present
-    # gpg validation breaks the installation
-    disable_gpg_check: true
 
 - name: Start and enable SSH service
   service:
@@ -28,70 +27,10 @@
     state: started
 
 - name: Create user with non-root privileges
-  ansible.builtin.user:
-    name: "{{ user }}"
-    shell: /bin/bash
-    create_home: true
+  import_tasks: setup_user.yaml
 
-- name: Disable user password to allow passwordless login
-  shell: passwd -d user
-
-- name: Enable local bin for user
-  become: true
-  become_user: "{{ user }}"
-  lineinfile:
-    path: "/home/{{ user }}/.bashrc"
-    line: "export PATH=$HOME/.local/bin:$PATH"
-    create: true
-
-- name: Create application directory
-  file:
-    path: "{{ repo_dir }}"
-    state: directory
-    owner: "{{ user }}"
-    group: "{{ user }}"
-    mode: 0755
-
-- name: Mark "{{ repo_dir }} safe for git"
-  become: true
-  become_user: "{{ user }}"
-  ansible.builtin.command: git config --global --add safe.directory "{{ repo_dir }}"
-
-- name: Clone fit-ctf repo
-  become: true
-  become_user: "{{ user }}"
-  ansible.builtin.git:
-    repo: "{{ repo_url }}"
-    dest: "{{ repo_dir }}"
-    version: devel
-    update: true
-
-- name: Ensure pipx path
-  become: true
-  become_user: "{{ user }}"
-  shell: pipx ensurepath
-  args:
-    creates: "/home/{{ user }}/.local/bin/poetry"
-  environment:
-    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
-
-- name: Install Poetry
-  become: true
-  become_user: "{{ user }}"
-  community.general.pipx:
-    name: poetry
-    state: present
-  environment:
-    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
-
-- name: Install project dependencies
-  become: true
-  become_user: "{{ user }}"
-  shell: poetry install
-  args:
-    chdir: "{{ repo_dir }}"
-  environment:
-    PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
+- name: Install fit-ctf project
+  import_tasks: install_fit_ctf.yaml
 
 - name: Create data directory
   file:
@@ -131,17 +70,6 @@
     - regexp: "^#(MODULE_SHARE_DIR=).*$"
       line: "\\1{{ repo_dir }}-data/modules"
 
-- name: Rename the generated file
-  become: true
-  become_user: "{{ user }}"
-  copy:
-    src: "{{ repo_dir }}/.env"
-    dest: "{{ repo_dir }}/.env"
-    remote_src: true
-    owner: "{{ user }}"
-    group: "{{ user }}"
-    mode: 0644
-
 - name: Generate sshd configuration
   become: true
   become_user: "{{ user }}"
@@ -172,81 +100,8 @@
     name: sshd
     state: restarted
 
+# configuration to deploy local database using podman
 - block:
-    - name: Ensure required variables for running a local database
-      assert:
-        that:
-          - db_admin_username is defined
-          - db_admin_password is defined
-
-    - name: Enable runtime dir and local bin in .bashrc
-      become: true
-      become_user: "{{ user }}"
-      lineinfile:
-        path: "/home/{{ user }}/.bashrc"
-        line: "export XDG_RUNTIME_DIR=/tmp/1000-runtime"
-        create: true
-
-    - name: Create runtime dir
-      file:
-        path: "/tmp/1000-runtime"
-        state: directory
-        mode: '0755'
-        owner: "{{ user }}"
-        group: "{{ user }}"
-        recurse: true
-
-    - name: Install podman
-      package:
-        name:
-          - podman
-        state: present
-
-    - name: Deploy database
-      become: true
-      become_user: "{{ user }}"
-      shell: |
-        poetry run inv db-deploy \
-          --db-admin-username "{{ db_admin_username }}" \
-          --db-admin-password "{{ db_admin_password }}" \
-          --db-username "{{ db_username }}" \
-          --db-password "{{ db_password }}" \
-          --db-name "{{ db_name }}" \
-      args:
-        chdir: "{{ repo_dir }}"
-      environment:
-        PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
-
-    - name: Enable user lingering
-      shell: "loginctl enable-linger {{ user }}"
-
-    - name: Start and enable MongoDB user service
-      become: true
-      become_user: "{{ user }}"
-      systemd:
-        name: mongodb.service
-        state: started
-        enabled: yes
-        scope: user
-
-    - name: Wait for MongoDB to be available
-      wait_for:
-        host: localhost
-        port: 27017
-        timeout: 30
-
-    - name: Update env file
-      become: true
-      become_user: "{{ user }}"
-      shell: |
-        poetry run inv generate-env \
-          --db-username "{{ db_username }}" \
-          --db-password "{{ db_password }}" \
-          --db-host localhost \
-          --db-name "{{ db_name }}" \
-      args:
-        chdir: "{{ repo_dir }}"
-      environment:
-        PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
-
+    - name: Setup MongoDB container
+      include_tasks: install_local_db.yaml
   when: local_db | default(false)

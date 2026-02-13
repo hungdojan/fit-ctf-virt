@@ -1,0 +1,35 @@
+- name: Create user with non-root privileges
+  ansible.builtin.user:
+    name: "{{ user }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Disable user password to allow passwordless login
+  shell: passwd -d user
+
+- name: Enable local bin for user
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "/home/{{ user }}/.bashrc"
+    line: "export PATH=$HOME/.local/bin:$PATH"
+    create: true
+
+- name: Enable runtime dir and local bin in .bashrc
+  become: true
+  become_user: "{{ user }}"
+  lineinfile:
+    path: "/home/{{ user }}/.bashrc"
+    line: "export XDG_RUNTIME_DIR=/tmp/1000-runtime"
+    create: true
+
+- name: Create runtime dir
+  file:
+    path: "/tmp/1000-runtime"
+    state: directory
+    mode: '0755'
+    owner: "{{ user }}"
+    group: "{{ user }}"
+    recurse: true
+
+
