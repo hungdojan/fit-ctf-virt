@@ -1,0 +1,24 @@
+services:
+  prometheus:
+    image: "docker.io/prom/prometheus:{{ prometheus_version }}"
+    container_name: prometheus
+    volumes:
+      - "{{ work_dir }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+    ports:
+      - "{{ prometheus_port }}:9090"
+
+  grafana:
+    image: "docker.io/grafana/grafana:{{ grafana_version }}"
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+    ports:
+      - "{{ grafana_port }}:3000"
+    volumes:
+      - "{{ work_dir }}/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources"
+      - "{{ work_dir }}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards"
+      - "{{ work_dir }}/grafana/dashboards:/etc/grafana/dashboards"
+    depends_on:
+      - prometheus
+

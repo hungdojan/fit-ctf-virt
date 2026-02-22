@@ -173,8 +173,30 @@ def setup_database(c: Context, config: dict):
         c.run(cmd, echo=True, pty=True)
 
 
+def setup_monitoring(c: Context, config: dict):
+    name = config["name"]
+    result = run(f"incus list --format json", hide=True, warn=True)
+    if result:
+        data = [d for d in json.loads(result.stdout) if d["name"] == name]
+        if data:
+            print(f"Instance {name} already exist")
+            return
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as monitoring_config:
+        name = config["name"]
+        image = config["config"].pop("image", "")
+        yaml.safe_dump(
+            config["config"],
+            monitoring_config,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        config_path = Path(monitoring_config.name)
+        cmd = f"incus init images:{image} {name} < {str(config_path)}"
+        c.run(cmd, echo=True, pty=True)
+
+
 def instance_is_running(c: Context, instance_name: str):
-    result = run(
+    result = c.run(
         f"incus list {instance_name} status=RUNNING -c n,s --format csv",
         hide=True,
         warn=True,
@@ -216,6 +238,7 @@ def setup(c: Context):
     setup_profile(c, config["common"]["profile"])
     setup_playground(c, config["playground"])
     setup_database(c, config["database"])
+    setup_monitoring(c, config["monitoring"])
 
 
 def init_instance(
@@ -237,15 +260,13 @@ def init_instance(
         echo=True,
         pty=True,
     )
-    c.run(
-        f"""
+    c.run(f"""
         # Set ownership to root (or another user)
         incus exec {name} -- chown -R root:root /tmp/setup
 
         # Make scripts executable
         incus exec {name} -- chmod -R 755 /tmp/setup
-        """
-    )
+        """)
     c.run(f"incus exec {name} -- bash /tmp/setup/init.sh", echo=True)
     ansible_cmd = (
         f"cd /tmp/setup/ansible && ansible-playbook -i inventory.ini playbook.yaml"
@@ -269,8 +290,15 @@ def init_database(c: Context):
 
 
 @task
+def init_monitoring(c: Context):
+    config = get_config()
+    init_instance(c, config, "monitoring")
+
+
+@task
 def teardown(c: Context):
     config = get_config()
+    delete_object(c, config["monitoring"]["name"], "instance")
     delete_object(c, config["database"]["name"], "instance")
     delete_object(c, config["playground"]["name"], "instance")
     delete_object(c, config["common"]["profile"]["name"], "profile")

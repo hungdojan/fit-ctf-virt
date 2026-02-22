@@ -1,0 +1,21 @@
+[Unit]
+Description=Node Exporter for Prometheus metrics
+After=local-fs.target
+
+[Container]
+Image=docker.io/prom/node-exporter:latest
+ContainerName=node-exporter
+PublishPort={{ node_exporter_port | default(9100) }}:9100
+# Mount host filesystem for metrics collection
+Volume=/proc:/host/proc:ro
+Volume=/sys:/host/sys:ro
+Volume=/:/rootfs:ro
+Environment=TZ=UTC
+Exec=--path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

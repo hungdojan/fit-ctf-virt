@@ -11,3 +11,4 @@ dnf install -y git pipx neovim ansible-core
 
 ansible-galaxy collection install community.general
 ansible-galaxy collection install community.mongodb
+ansible-galaxy collection install community.docker

@@ -1,0 +1,14 @@
+- name: Install resize tools
+  package:
+    name:
+      - cloud-utils-growpart
+    state: present
+
+- name: Resize second partition
+  shell: growpart /dev/sda 2
+  register: growpart_result
+  changed_when: "'CHANGED' in growpart_result.stdout"
+  failed_when: false
+
+- name: Resize filesystem
+  shell: resize2fs /dev/sda2

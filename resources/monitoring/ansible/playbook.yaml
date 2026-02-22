@@ -1,0 +1,13 @@
+---
+- name: Setup Prometheus monitoring
+  hosts: monitoring
+  vars:
+    prometheus_port: 9090
+    prometheus_version: "v3.5.1"
+    grafana_port: 3000
+    grafana_version: "12.3"
+    playground_ip: 10.100.0.2
+    node_exporter_port: 9100
+    work_dir: /opt/monitoring
+  roles:
+    - docker

@@ -6,5 +6,7 @@
     repo_url: https://github.com/hungdojan/fit-ctf
     repo_dir: /opt/fit-ctf
     rdz_port: 5555
+    node_exporter_port: 9100
   roles:
     - fit-ctf
+    - node-exporter

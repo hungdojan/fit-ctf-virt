@@ -1,0 +1,88 @@
+---
+- name: Ensure variables are set
+  assert:
+    that:
+      - prometheus_version is defined
+      - grafana_version is defined
+      - grafana_admin_user is defined
+      - grafana_admin_password is defined
+      - work_dir is defined
+      - playground_ip is defined
+      - node_exporter_port is defined
+    fail_msg: "Required monitoring variables are missing!"
+
+- name: Add Docker CE repository
+  command: >
+    dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+  args:
+    creates: /etc/yum.repos.d/docker-ce.repo
+
+- name: Install required packages
+  package:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Ensure Docker service is running
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create directories
+  file:
+    path: "{{ work_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Prometheus config directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ work_dir }}/prometheus"
+    - "{{ work_dir }}/grafana/provisioning/datasources"
+    - "{{ work_dir }}/grafana/provisioning/dashboards"
+    - "{{ work_dir }}/grafana/dashboards"
+
+- name: Create Prometheus config file
+  template:
+    src: prometheus.yaml.j2
+    dest: "{{ work_dir }}/prometheus/prometheus.yml"
+
+- name: Copy Grafana configurations
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+    - src: datasource_prometheus.yaml
+      dest: "{{ work_dir}}/grafana/provisioning/datasources/prometheus.yaml"
+    - src: dashboard_default.yaml
+      dest: "{{ work_dir}}/grafana/provisioning/dashboards/default.yaml"
+    - src: fit-ctf_graphs.json
+      dest: "{{ work_dir}}/grafana/dashboards/fit-ctf-graphs.json"
+
+- name: Create Docker Compose file
+  template:
+    src: docker-compose.yaml.j2
+    dest: "{{ work_dir }}/docker-compose.yml"
+
+- name: Create systemd docker service
+  template:
+    src: monitoring.service.j2
+    dest: /etc/systemd/system/monitoring.service
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable and start monitoring Docker
+  ansible.builtin.systemd:
+    name: monitoring
+    enabled: true
+    state: started

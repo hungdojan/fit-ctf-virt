@@ -10,6 +10,9 @@
       - db_host is defined
       - rdz_port is defined
 
+- name: Resize disk
+  include_tasks: resize_disk.yaml
+
 - name: Install dependencies openssh-server
   package:
     name:
