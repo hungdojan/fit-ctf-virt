@@ -173,6 +173,28 @@ def setup_database(c: Context, config: dict):
         c.run(cmd, echo=True, pty=True)
 
 
+def setup_local_database(c: Context, config: dict):
+    name = config["name"]
+    result = run(f"incus list --format json", hide=True, warn=True)
+    if result:
+        data = [d for d in json.loads(result.stdout) if d["name"] == name]
+        if data:
+            print(f"Instance {name} already exist")
+            return
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as database_config:
+        name = config["name"]
+        image = config["config"].pop("image", "")
+        yaml.safe_dump(
+            config["config"],
+            database_config,
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        config_path = Path(database_config.name)
+        cmd = f"incus init images:{image} {name} < {str(config_path)}"
+        c.run(cmd, echo=True, pty=True)
+
+
 def setup_monitoring(c: Context, config: dict):
     name = config["name"]
     result = run(f"incus list --format json", hide=True, warn=True)
@@ -239,6 +261,7 @@ def setup(c: Context):
     setup_playground(c, config["playground"])
     setup_database(c, config["database"])
     setup_monitoring(c, config["monitoring"])
+    setup_local_database(c, config["local_database"])
 
 
 def init_instance(
@@ -287,6 +310,12 @@ def init_playground(c: Context):
 def init_database(c: Context):
     config = get_config()
     init_instance(c, config, "database")
+
+
+@task
+def init_local_db(c: Context):
+    config = get_config()
+    init_instance(c, config, "local_database")
 
 
 @task
