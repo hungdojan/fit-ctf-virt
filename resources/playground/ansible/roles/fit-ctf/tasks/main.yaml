@@ -72,6 +72,8 @@
       line: "\\1{{ repo_dir }}-data/users"
     - regexp: "^#(MODULE_SHARE_DIR=).*$"
       line: "\\1{{ repo_dir }}-data/modules"
+    - regexp: "^#(SCENARIO_SHARE_DIR=).*$"
+      line: "\\1{{ repo_dir }}-data/scenarios"
 
 - name: Generate sshd configuration
   become: true

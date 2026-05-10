@@ -18,6 +18,35 @@
       - python3-pymongo
     state: present
 
+- name: Query installed mongodb-org-server RPM
+  ansible.builtin.command: rpm -q mongodb-org-server
+  register: mongo_server_rpm
+  changed_when: false
+  failed_when: false
+
+- name: Fail if MongoDB is already installed but not 7.x
+  ansible.builtin.assert:
+    that:
+      - mongo_server_rpm.stdout is regex('^mongodb-org-server-7\\.')
+    fail_msg: >-
+      This role installs MongoDB 7 only. Found {{ mongo_server_rpm.stdout }}.
+      Remove with: dnf remove 'mongodb-org*' then re-run.
+  when: mongo_server_rpm.rc == 0
+
+- name: Find MongoDB 8.x yum repository files
+  ansible.builtin.find:
+    paths: /etc/yum.repos.d
+    patterns: "mongodb-org-8*.repo"
+  register: mongodb8_repo_files
+
+- name: Remove MongoDB 8.x yum repository files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ mongodb8_repo_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Copy MongoDB repo file
   copy:
     src: mongodb-org-7.0.repo
@@ -32,6 +61,17 @@
     state: present
     # gpg validation breaks the installation
     disable_gpg_check: yes
+
+- name: Confirm mongod binary reports major version 7
+  ansible.builtin.command: mongod --version
+  register: mongod_version_out
+  changed_when: false
+
+- name: Assert installed mongod is 7.x (not 8+)
+  ansible.builtin.assert:
+    that:
+      - "'db version v7.' in mongod_version_out.stdout"
+    fail_msg: "Expected MongoDB 7.x from repo; mongod reports: {{ mongod_version_out.stdout }}"
 
 - name: Ensure MongoDB data directory exists
   file:
