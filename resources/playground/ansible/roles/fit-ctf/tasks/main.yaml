@@ -13,6 +13,9 @@
 - name: Resize disk
   include_tasks: resize_disk.yaml
 
+- name: Increase limits
+  include_tasks: increase_ulimit.yaml
+
 - name: Install dependencies openssh-server
   package:
     name:

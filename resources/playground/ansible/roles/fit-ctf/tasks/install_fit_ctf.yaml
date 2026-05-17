@@ -46,4 +46,3 @@
     chdir: "{{ repo_dir }}"
   environment:
     PATH: "/home/{{ user }}/.local/bin:{{ ansible_env.PATH }}"
-
