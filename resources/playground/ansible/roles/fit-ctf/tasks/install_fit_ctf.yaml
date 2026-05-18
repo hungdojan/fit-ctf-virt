@@ -17,7 +17,7 @@
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ repo_dir }}"
-    version: devel
+    version: main
     update: true
 
 - name: Ensure pipx path
