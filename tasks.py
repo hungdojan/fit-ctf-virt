@@ -62,6 +62,8 @@ def setup_storage(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        # flush buffered data so incus reads a complete file, not an empty one
+        storage_config.flush()
         config_path = Path(storage_config.name)
         cmd = f"incus storage create {name} {storage_type} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
@@ -104,6 +106,7 @@ def setup_network(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        network_config.flush()
         config_path = Path(network_config.name)
         cmd = f"incus network create {name} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
@@ -124,6 +127,7 @@ def setup_profile(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        profile_config.flush()
         config_path = Path(profile_config.name)
         cmd = f"incus profile create {name} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
@@ -146,6 +150,7 @@ def setup_playground(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        playground_config.flush()
         config_path = Path(playground_config.name)
         cmd = f"incus init images:{image} {name} {'--vm' if use_vm else ''} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
@@ -168,6 +173,7 @@ def setup_database(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        database_config.flush()
         config_path = Path(database_config.name)
         cmd = f"incus init images:{image} {name} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
@@ -190,6 +196,7 @@ def setup_monitoring(c: Context, config: dict):
             default_flow_style=False,
             sort_keys=False,
         )
+        monitoring_config.flush()
         config_path = Path(monitoring_config.name)
         cmd = f"incus init images:{image} {name} < {str(config_path)}"
         c.run(cmd, echo=True, pty=True)
